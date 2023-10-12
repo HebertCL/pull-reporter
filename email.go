@@ -14,11 +14,12 @@ type senderConfig struct {
 }
 
 type emailData struct {
-	Repository    repository
-	OpenPulls     string
-	ClosedPulls   string
-	DraftPulls    string
-	RecipientName string
+	Repository     repository
+	OpenPulls      string
+	ClosedPulls    string
+	DraftPulls     string
+	RecipientName  string
+	RecipientEmail string
 }
 
 // Creates a SMTP plain authentication
@@ -31,25 +32,25 @@ type emailData struct {
 
 func generateTemplateEmail(data emailData) (string, error) {
 	message := `
-		Subject: GitHub PR Report
-		To: hebert.cuellar@gmail.com
-		
-		Greetings {{.RecipientName}}!,
+Subject: GitHub PR Report
+To: {{.RecipientEmail}}
 
-		This is the Pull Request report digest for {{.Repository.Owner}}/{{.Repository.Name}} project's last week:
+Greetings {{.RecipientName}}!,
 
-		Open Pull Requests:
-		{{.OpenPulls}}
+This is the Pull Request report digest for {{.Repository.Owner}}/{{.Repository.Name}} project's last week:
 
-		Closed Pull Requests:
-		{{.ClosedPulls}}
+Open Pull Requests:
+{{.OpenPulls}}
 
-		Open Drafts:
-		{{.DraftPulls}}
-		
-		Until next week.
+Closed Pull Requests:
+{{.ClosedPulls}}
 
-		HebertCL
+Open Drafts:
+{{.DraftPulls}}
+
+Until next week.
+
+HebertCL
 	`
 
 	tmpl, err := template.New("email").Parse(message)
@@ -74,6 +75,7 @@ func (sc senderConfig) sendReport(recipient []string, data emailData) error {
 
 	fmt.Printf("Display email content:\n%s\n", message)
 
+	//TODO: Actually send the email
 	// if err := smtp.SendMail(sc.Server+":"+fmt.Sprint(sc.SmtpPort),
 	// 	emailAuth,
 	// 	sc.User,
