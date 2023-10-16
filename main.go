@@ -5,6 +5,9 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/HebertCL/pull-reporter/pkg/email"
+	"github.com/HebertCL/pull-reporter/pkg/github"
+
 	"github.com/joho/godotenv"
 )
 
@@ -16,6 +19,7 @@ func main() {
 
 	repoOwner := os.Getenv("REPO_OWNER")
 	repoName := os.Getenv("REPO_NAME")
+	authToken := os.Getenv("AUTH_TOKEN")
 	recipientName := os.Getenv("RECIPIENT_NAME")
 	recipientEmail := os.Getenv("RECIPIENT_EMAIL")
 	mailServer := os.Getenv("MAIL_SERVER")
@@ -28,25 +32,27 @@ func main() {
 		log.Fatalf("Couldn't convert port to integer: %v", err)
 	}
 
-	// Create GitHub default client
-	client := newGhClient()
+	// Create GitHub client. Uses default client if authToken is not set.
+	// Using default client for private repos or repos out of your orgs
+	// will result in failed calls to GitHub API
+	client := github.NewGhClient(authToken)
 
 	// Define recipient
 	recipientList := []string{"hebert.cuellar@gmail.com"}
 
 	// Define repository values
-	repo := repository{
+	repo := github.Repository{
 		Owner: repoOwner,
 		Name:  repoName,
 	}
 
 	// Get all PR related values which will be used in the template email
-	openPulls := repo.sortPullRequests(client, "open", false)
-	closedPulls := repo.sortPullRequests(client, "closed", false)
-	draftPulls := repo.sortPullRequests(client, "open", true)
+	openPulls := repo.SortPullRequests(client, "open", false)
+	closedPulls := repo.SortPullRequests(client, "closed", false)
+	draftPulls := repo.SortPullRequests(client, "open", true)
 
 	// Define email message body values for template
-	emailBody := emailData{
+	emailBody := email.EmailData{
 		OpenPulls:      openPulls.String(),
 		ClosedPulls:    closedPulls.String(),
 		DraftPulls:     draftPulls.String(),
@@ -56,14 +62,14 @@ func main() {
 	}
 
 	// Define email configuration
-	smtpConfig := senderConfig{
+	smtpConfig := email.SenderConfig{
 		Server:   mailServer,
 		User:     mailUser,
 		Password: mailPass,
 		SmtpPort: port,
 	}
 
-	if err := smtpConfig.sendReport(recipientList, emailBody); err != nil {
+	if err := smtpConfig.SendReport(recipientList, emailBody); err != nil {
 		log.Fatal(err)
 	}
 }

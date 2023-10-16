@@ -1,4 +1,4 @@
-package main
+package github
 
 import (
 	"context"
@@ -10,7 +10,7 @@ import (
 	"github.com/google/go-github/v55/github"
 )
 
-type repository struct {
+type Repository struct {
 	Owner string
 	Name  string
 }
@@ -25,9 +25,15 @@ type pullRequest struct {
 }
 
 // Create a new GH client. Uses default, unauthenticated client
-// TODO: Support both authenticated and non-authenticated clients
-func newGhClient() *github.Client {
-	return github.NewClient(nil)
+func NewGhClient(token string) *github.Client {
+	// Return default token if no authentication token is provided
+	if token == "" {
+		return github.NewClient(nil)
+	}
+
+	client := github.NewClient(nil).WithAuthToken(token)
+
+	return client
 }
 
 // Create a list with PRs with 7 or less days and return it
@@ -57,9 +63,10 @@ func listPullRequests(client *github.Client, name string, owner string) []*githu
 	return prList
 }
 
-// Filter open PRs which are not Draft.
-// FIXME: The filter for open PRs, both Draft and non-Draft could probably be handle in the same function
-func (r repository) sortPullRequests(client *github.Client, prState string, prDraft bool) strings.Builder {
+// SortPullRequests creates a list of all PRs in the last 7 days and returns
+// a formated string of values for those PRs taking into account the PR state
+// and its draft status.
+func (r Repository) SortPullRequests(client *github.Client, prState string, prDraft bool) strings.Builder {
 	var unfilteredPrList []pullRequest
 	prList := listPullRequests(client, r.Name, r.Owner)
 
@@ -85,14 +92,20 @@ func (r repository) sortPullRequests(client *github.Client, prState string, prDr
 	}
 
 	var pullstring strings.Builder
+
+	// Validate if the slice has content
+	if len(pulls) == 0 {
+		fmt.Fprintf(&pullstring, "\nHooray! Nothing to do here :D\n")
+
+		return pullstring
+	}
+
 	//Loop over the filtered list and return it as a string
 	for _, value := range pulls {
 		if len(pulls) != 0 {
-			fmt.Fprintf(&pullstring, "Number: %v\nTitle: %s\nCreated: %s\nState: %s\nDraft: %v \nURL: %s\n\n", value.Number, value.Title, value.CreationDate, value.State, value.Draft, value.Url)
-		} else {
-			fmt.Fprintf(&pullstring, "Hooray! There's no %s pull requests.", prState)
+			fmt.Fprintf(&pullstring, "\nNumber: %v\nTitle: %s\nCreated: %s\nState: %s\nDraft: %v \nURL: %s\n\n", value.Number, value.Title, value.CreationDate, value.State, value.Draft, value.Url)
 		}
 	}
-	fmt.Println(len(pulls))
+
 	return pullstring
 }

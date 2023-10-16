@@ -1,20 +1,22 @@
-package main
+package email
 
 import (
 	"bytes"
 	"fmt"
 	"html/template"
+
+	"github.com/HebertCL/pull-reporter/pkg/github"
 )
 
-type senderConfig struct {
+type SenderConfig struct {
 	Server   string
 	User     string
 	Password string
 	SmtpPort int
 }
 
-type emailData struct {
-	Repository     repository
+type EmailData struct {
+	Repository     github.Repository
 	OpenPulls      string
 	ClosedPulls    string
 	DraftPulls     string
@@ -30,7 +32,7 @@ type emailData struct {
 // 	return auth
 // }
 
-func generateTemplateEmail(data emailData) (string, error) {
+func generateTemplateEmail(data EmailData) (string, error) {
 	message := `
 Subject: GitHub PR Report
 To: {{.RecipientEmail}}
@@ -66,7 +68,7 @@ HebertCL
 	return emailBody.String(), nil
 }
 
-func (sc senderConfig) sendReport(recipient []string, data emailData) error {
+func (sc SenderConfig) SendReport(recipient []string, data EmailData) error {
 	// emailAuth := emailAuthentication(sc.User, sc.Password, sc.Server)
 	message, err := generateTemplateEmail(data)
 	if err != nil {
