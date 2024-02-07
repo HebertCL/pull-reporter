@@ -5,16 +5,15 @@ import (
 	"os"
 	"strconv"
 
-	"github.com/HebertCL/pull-reporter/pkg/email"
 	"github.com/HebertCL/pull-reporter/pkg/github"
-
-	"github.com/joho/godotenv"
+	"github.com/HebertCL/pull-reporter/pkg/notifications"
+	"github.com/HebertCL/pull-reporter/pkg/utils"
 )
 
 func main() {
 	// Load values from .env file
-	if err := godotenv.Load(); err != nil {
-		log.Fatalf("Couldn't load values from .env: %v", err)
+	if err := utils.LoadEnv(".env"); err != nil {
+		log.Fatal(err)
 	}
 
 	repoOwner := os.Getenv("REPO_OWNER")
@@ -52,7 +51,7 @@ func main() {
 	draftPulls := repo.SortPullRequests(client, "open", true)
 
 	// Define email message body values for template
-	emailBody := email.EmailData{
+	emailBody := notifications.EmailData{
 		OpenPulls:      openPulls.String(),
 		ClosedPulls:    closedPulls.String(),
 		DraftPulls:     draftPulls.String(),
@@ -62,7 +61,7 @@ func main() {
 	}
 
 	// Define email configuration
-	smtpConfig := email.SenderConfig{
+	smtpConfig := notifications.SenderConfig{
 		Server:   mailServer,
 		User:     mailUser,
 		Password: mailPass,
