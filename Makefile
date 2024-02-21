@@ -39,6 +39,8 @@ dev-up-local:
 
 	kind load docker-image $(TELEPRESENCE) --name $(KIND_CLUSTER)
 	kind load docker-image $(POSTGRES) --name $(KIND_CLUSTER)
+	kind load docker-image $(VAULT) --name $(KIND_CLUSTER)
+	kind load docker-image $(ZIPKIN) --name $(KIND_CLUSTER)
 
 dev-up: dev-up-local
 
