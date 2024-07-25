@@ -5,6 +5,8 @@ import (
 	"os"
 	"strconv"
 
+	"github.com/HebertCL/pull-reporter/mailer"
+	"github.com/HebertCL/pull-reporter/repo"
 	"github.com/joho/godotenv"
 )
 
@@ -28,42 +30,19 @@ func main() {
 		log.Fatalf("Couldn't convert port to integer: %v", err)
 	}
 
-	// Create GitHub default client
-	client := newGhClient()
-
-	// Define recipient
-	recipientList := []string{"hebert.cuellar@gmail.com"}
-
-	// Define repository values
-	repo := repository{
-		Owner: repoOwner,
-		Name:  repoName,
-	}
-
-	// Get all PR related values which will be used in the template email
-	openPulls := repo.sortPullRequests(client, "open", false)
-	closedPulls := repo.sortPullRequests(client, "closed", false)
-	draftPulls := repo.sortPullRequests(client, "open", true)
-
-	// Define email message body values for template
-	emailBody := emailData{
-		OpenPulls:      openPulls.String(),
-		ClosedPulls:    closedPulls.String(),
-		DraftPulls:     draftPulls.String(),
-		Repository:     repo,
-		RecipientName:  recipientName,
-		RecipientEmail: recipientEmail,
-	}
-
 	// Define email configuration
-	smtpConfig := senderConfig{
+	smtpConfig := mailer.MailerConfig{
 		Server:   mailServer,
 		User:     mailUser,
 		Password: mailPass,
 		SmtpPort: port,
 	}
 
-	if err := smtpConfig.sendReport(recipientList, emailBody); err != nil {
-		log.Fatal(err)
-	}
+	mailer := mailer.NewMailer(smtpConfig)
+
+	// Create GitHub default client
+	client := repo.NewGithubClient(mailer)
+
+	client.ProcessRepo(repoOwner, repoName, recipientName, recipientEmail)
+
 }
