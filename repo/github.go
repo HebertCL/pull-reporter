@@ -1,4 +1,4 @@
-package main
+package repo
 
 import (
 	"context"
@@ -7,13 +7,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/HebertCL/pull-reporter/mailer"
 	"github.com/google/go-github/v55/github"
 )
 
-type repository struct {
-	Owner string
-	Name  string
-}
+// type Repository struct {
+// 	Owner string
+// 	Name  string
+// }
 
 type pullRequest struct {
 	CreationDate time.Time
@@ -24,14 +25,53 @@ type pullRequest struct {
 	Draft        bool
 }
 
+type Mailer interface {
+	SendReport(recipientList []string, data mailer.EmailData) error
+}
+
+type githubClient struct {
+	client *github.Client
+
+	mailer Mailer
+}
+
 // Create a new GH client. Uses default, unauthenticated client
 // TODO: Support both authenticated and non-authenticated clients
-func newGhClient() *github.Client {
-	return github.NewClient(nil)
+func NewGithubClient(mailer Mailer) *githubClient {
+	return &githubClient{
+		client: github.NewClient(nil),
+		mailer: mailer,
+	}
+}
+
+func (c *githubClient) ProcessRepo(owner, name, recipientName, recipientEmail string) {
+
+	// Define recipient
+	recipientList := []string{"hebert.cuellar@gmail.com"}
+
+	// Get all PR related values which will be used in the template email
+	openPulls := c.sortPullRequests(owner, name, "open", false)
+	closedPulls := c.sortPullRequests(owner, name, "closed", false)
+	draftPulls := c.sortPullRequests(owner, name, "open", true)
+
+	// Define email message body values for template
+	emailBody := mailer.EmailData{
+		RepositoryOwner: owner,
+		RepositoryName:  name,
+		OpenPulls:       openPulls.String(),
+		ClosedPulls:     closedPulls.String(),
+		DraftPulls:      draftPulls.String(),
+		RecipientName:   recipientName,
+		RecipientEmail:  recipientEmail,
+	}
+
+	if err := c.mailer.SendReport(recipientList, emailBody); err != nil {
+		log.Fatal(err)
+	}
 }
 
 // Create a list with PRs with 7 or less days and return it
-func listPullRequests(client *github.Client, name string, owner string) []*github.PullRequest {
+func (c *githubClient) listPullRequests(owner string, name string) []*github.PullRequest {
 	var prList []*github.PullRequest
 	ctx := context.Background()
 	// Use defined PR options for the specified requirement
@@ -41,7 +81,7 @@ func listPullRequests(client *github.Client, name string, owner string) []*githu
 		// Direction: "desc",
 	}
 
-	prs, resp, err := client.PullRequests.List(ctx, owner, name, options)
+	prs, resp, err := c.client.PullRequests.List(ctx, owner, name, options)
 	if err != nil {
 		log.Printf("Failed to get Pull Requests: %s\n Status Code: %v", err, resp.StatusCode)
 		return []*github.PullRequest{}
@@ -59,9 +99,9 @@ func listPullRequests(client *github.Client, name string, owner string) []*githu
 
 // Filter open PRs which are not Draft.
 // FIXME: The filter for open PRs, both Draft and non-Draft could probably be handle in the same function
-func (r repository) sortPullRequests(client *github.Client, prState string, prDraft bool) strings.Builder {
+func (c *githubClient) sortPullRequests(owner, name, prState string, prDraft bool) strings.Builder {
 	var unfilteredPrList []pullRequest
-	prList := listPullRequests(client, r.Name, r.Owner)
+	prList := c.listPullRequests(owner, name)
 
 	// Loop over GitHub PR object
 	for _, pr := range prList {
