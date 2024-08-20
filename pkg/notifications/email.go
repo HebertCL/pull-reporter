@@ -1,4 +1,4 @@
-package main
+package notifications
 
 import (
 	"bytes"
@@ -6,20 +6,21 @@ import (
 	"html/template"
 )
 
-type senderConfig struct {
+type MailerConfig struct {
 	Server   string
 	User     string
 	Password string
 	SmtpPort int
 }
 
-type emailData struct {
-	Repository     repository
-	OpenPulls      string
-	ClosedPulls    string
-	DraftPulls     string
-	RecipientName  string
-	RecipientEmail string
+type EmailData struct {
+	RepositoryOwner string
+	RepositoryName  string
+	OpenPulls       string
+	ClosedPulls     string
+	DraftPulls      string
+	RecipientName   string
+	RecipientEmail  string
 }
 
 // Creates a SMTP plain authentication
@@ -30,15 +31,21 @@ type emailData struct {
 // 	return auth
 // }
 
-func generateTemplateEmail(data emailData) (string, error) {
+type mailer struct{}
+
+func NewMailer(config MailerConfig) *mailer {
+	return &mailer{}
+}
+
+func (m mailer) generateTemplateData(data EmailData) (string, error) {
+	var emailBody bytes.Buffer
+
 	message := `
 Subject: GitHub PR Report
 To: {{.RecipientEmail}}
-
 Greetings {{.RecipientName}}!,
 
-This is the Pull Request report digest for {{.Repository.Owner}}/{{.Repository.Name}} project's last week:
-
+This is the Pull Request report digest for {{.RepositoryOwner}}/{{.RepositoryName}} project's last week:
 Open Pull Requests:
 {{.OpenPulls}}
 
@@ -52,13 +59,11 @@ Until next week.
 
 HebertCL
 	`
-
 	tmpl, err := template.New("email").Parse(message)
 	if err != nil {
 		return "", err
 	}
 
-	var emailBody bytes.Buffer
 	if err := tmpl.Execute(&emailBody, data); err != nil {
 		return "", err
 	}
@@ -66,16 +71,15 @@ HebertCL
 	return emailBody.String(), nil
 }
 
-func (sc senderConfig) sendReport(recipient []string, data emailData) error {
+func (m mailer) SendReport(recipientList []string, data EmailData) error {
 	// emailAuth := emailAuthentication(sc.User, sc.Password, sc.Server)
-	message, err := generateTemplateEmail(data)
+	message, err := m.generateTemplateData(data)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("Display email content:\n%s\n", message)
-
-	//TODO: Actually send the email
+	// TODO: Actually send the email
 	// if err := smtp.SendMail(sc.Server+":"+fmt.Sprint(sc.SmtpPort),
 	// 	emailAuth,
 	// 	sc.User,

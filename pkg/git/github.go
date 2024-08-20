@@ -1,4 +1,4 @@
-package main
+package git
 
 import (
 	"context"
@@ -7,13 +7,9 @@ import (
 	"strings"
 	"time"
 
+	mailer "github.com/HebertCL/pull-reporter/pkg/notifications"
 	"github.com/google/go-github/v55/github"
 )
-
-type repository struct {
-	Owner string
-	Name  string
-}
 
 type pullRequest struct {
 	CreationDate time.Time
@@ -24,14 +20,48 @@ type pullRequest struct {
 	Draft        bool
 }
 
-// Create a new GH client. Uses default, unauthenticated client
-// TODO: Support both authenticated and non-authenticated clients
-func newGhClient() *github.Client {
-	return github.NewClient(nil)
+type Mailer interface {
+	SendReport(recipientList []string, data mailer.EmailData) error
 }
 
-// Create a list with PRs with 7 or less days and return it
-func listPullRequests(client *github.Client, name string, owner string) []*github.PullRequest {
+type githubClient struct {
+	client *github.Client
+	mailer Mailer
+}
+
+func NewGithubClient(mailer Mailer) *githubClient {
+	return &githubClient{
+		client: github.NewClient(nil),
+		mailer: mailer,
+	}
+}
+
+func (c *githubClient) ProcessRepo(owner, name, recipientName, recipientEmail string) {
+	// Define recipient
+	recipientList := []string{"hebert.cuellar@gmail.com"}
+
+	// Get all PR related values which will be used in the template email
+	openPulls := c.sortPullRequests(owner, name, "open", false)
+	closedPulls := c.sortPullRequests(owner, name, "closed", false)
+	draftPulls := c.sortPullRequests(owner, name, "open", true)
+
+	// Define email message body values for template
+	emailBody := mailer.EmailData{
+		RepositoryOwner: owner,
+		RepositoryName:  name,
+		OpenPulls:       openPulls.String(),
+		ClosedPulls:     closedPulls.String(),
+		DraftPulls:      draftPulls.String(),
+		RecipientName:   recipientName,
+		RecipientEmail:  recipientEmail,
+	}
+
+	if err := c.mailer.SendReport(recipientList, emailBody); err != nil {
+		log.Fatal(err)
+	}
+}
+
+func (c *githubClient) listPullRequests(owner string, name string) []*github.PullRequest {
 	var prList []*github.PullRequest
 	ctx := context.Background()
 	// Use defined PR options for the specified requirement
@@ -41,27 +71,23 @@ func listPullRequests(client *github.Client, name string, owner string) []*githu
 		// Direction: "desc",
 	}
 
-	prs, resp, err := client.PullRequests.List(ctx, owner, name, options)
+	prs, resp, err := c.client.PullRequests.List(ctx, owner, name, options)
 	if err != nil {
 		log.Printf("Failed to get Pull Requests: %s\n Status Code: %v", err, resp.StatusCode)
 		return []*github.PullRequest{}
 	}
-
 	for _, pr := range prs {
 		hoursSinceCreation := time.Since(pr.CreatedAt.Time)
 		if hoursSinceCreation.Hours() < 7*24 {
 			prList = append(prList, pr)
 		}
 	}
-
 	return prList
 }
 
-// Filter open PRs which are not Draft.
-// FIXME: The filter for open PRs, both Draft and non-Draft could probably be handle in the same function
-func (r repository) sortPullRequests(client *github.Client, prState string, prDraft bool) strings.Builder {
+func (c *githubClient) sortPullRequests(owner, name, prState string, prDraft bool) strings.Builder {
 	var unfilteredPrList []pullRequest
-	prList := listPullRequests(client, r.Name, r.Owner)
+	prList := c.listPullRequests(owner, name)
 
 	// Loop over GitHub PR object
 	for _, pr := range prList {
@@ -74,7 +100,6 @@ func (r repository) sortPullRequests(client *github.Client, prState string, prDr
 			Draft:        *pr.Draft,
 		})
 	}
-
 	var pulls []pullRequest
 	// Loop over unfiltered pull request custom object
 	// and save open pull requests
@@ -83,9 +108,8 @@ func (r repository) sortPullRequests(client *github.Client, prState string, prDr
 			pulls = append(pulls, pull)
 		}
 	}
-
 	var pullstring strings.Builder
-	//Loop over the filtered list and return it as a string
+	// Loop over the filtered list and return it as a string
 	for _, value := range pulls {
 		if len(pulls) != 0 {
 			fmt.Fprintf(&pullstring, "Number: %v\nTitle: %s\nCreated: %s\nState: %s\nDraft: %v \nURL: %s\n\n", value.Number, value.Title, value.CreationDate, value.State, value.Draft, value.Url)
